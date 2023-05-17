@@ -3,7 +3,5 @@ from typing import NoReturn
 
 
 class ISpeechRecognizer(ABC):
-
     @abstractmethod
-    def listening(self) -> NoReturn:
-        ...
+    def recognize(self, audio) -> str: ...

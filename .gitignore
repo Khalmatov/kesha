@@ -4,3 +4,5 @@ __pycache__/
 /.idea/
 /assets/chunk.wav
 /.env
+/third_party/
+/recording.wav
