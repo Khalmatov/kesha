@@ -3,18 +3,22 @@ import threading
 import time
 import tkinter as tk
 import wave
+from pathlib import Path
 
+import numpy as np
 import pyaudio
+import soundfile as sf
 
+import config
 from adapters.tinkoff.voicekit import VoiceKitRecognizer
 from adapters.vk.cloud import VKCloudAudioRecognizer
-# from adapters.yandex.speach_kit import YandexSpeachKitRecognizer
+from adapters.yandex.speach_kit import YandexSpeachKitRecognizer
 
 
 class SpeechRecorderApp:
-    FORMAT = pyaudio.paInt16
+    SAMPLE_FORMAT = pyaudio.paInt16
     CHANNELS = 1
-    RATE = 44100
+    SAMPLE_RATE = 44100
     CHUNK = 2048
 
     def __init__(self):
@@ -59,20 +63,21 @@ class SpeechRecorderApp:
     def record(self):
         audio = pyaudio.PyAudio()
         stream = audio.open(
-            format=self.FORMAT,
+            format=self.SAMPLE_FORMAT,
             channels=self.CHANNELS,
-            rate=self.RATE,
+            rate=self.SAMPLE_RATE,
             input=True,
             frames_per_buffer=self.CHUNK,
             # input_device_index=9
         )
 
-        frames = []
+        wave_frames, ogg_frames = [], []
         start = time.time()
 
         while self.recording:
             data = stream.read(self.CHUNK, exception_on_overflow=False)
-            frames.append(data)
+            wave_frames.append(data)
+            ogg_frames.append(np.frombuffer(data, dtype=np.int16))
 
             passed = time.time() - start
             secs = passed % 60
@@ -84,56 +89,54 @@ class SpeechRecorderApp:
         stream.close()
         audio.terminate()
 
-        exists = True
-        i = 1
+        self.save_wav(audio, wave_frames)
+        self.save_ogg(ogg_frames)
 
-        while exists:
-            if os.path.exists(f'recording{i}.wav'):
-                i += 1
-            else:
-                exists = False
-
-        sound_file = wave.open(f'recording.wav', 'wb')
+    def save_wav(self, audio, frames: list):
+        sound_file = wave.open(str(config.WAVE_PATH), 'wb')
         sound_file.setnchannels(self.CHANNELS)
-        sound_file.setsampwidth(audio.get_sample_size(self.FORMAT))
-        sound_file.setframerate(self.RATE)
+        sound_file.setsampwidth(audio.get_sample_size(self.SAMPLE_FORMAT))
+        sound_file.setframerate(self.SAMPLE_RATE)
         sound_file.writeframes(b''.join(frames))
         sound_file.close()
 
+    def save_ogg(self, frames: list):
+        frames = np.concatenate(frames).astype(np.float32)
+        sf.write(str(config.OGG_PATH), frames, self.SAMPLE_RATE, format="ogg")
+
     def start_recording(self):
-        # self.record()
+        self.record()
         self.recognize()
 
     def recognize(self):
         self.label.config(text='Идет распознавание текста...')
 
-        with open('recording.wav', 'rb') as f:
-            audio = f.read()
-            threads = []
+        threads = [
+            threading.Thread(target=self.recognize_by_yandex, args=[config.OGG_PATH]),
+            threading.Thread(target=self.recognize_by_tinkoff, args=[config.WAVE_PATH]),
+            threading.Thread(target=self.recognize_by_vk, args=[config.WAVE_PATH])
+        ]
 
-            for func in (self.recognize_by_yandex, self.recognize_by_tinkoff, self.recognize_by_vk):
-                thread = threading.Thread(target=func, args=[audio])
-                thread.start()
-                threads.append(thread)
+        for thread in threads:
+            thread.start()
 
-            for thread in threads:
-                thread.join()
+        for thread in threads:
+            thread.join()
 
         self.label.config(text='')
 
-    def recognize_by_yandex(self, audio: bytes):
-        # recognized_text_of_yandex = YandexSpeachKitRecognizer().recognize(audio)
+    def recognize_by_yandex(self, audio_path: Path):
+        recognized_text_of_yandex = YandexSpeachKitRecognizer.recognize(audio_path)
         self.yandex_text_output.delete(1.0, tk.END)
-        self.yandex_text_output.insert(tk.END, 'recognized_text_of_yandex')
+        self.yandex_text_output.insert(tk.END, recognized_text_of_yandex)
 
-    def recognize_by_tinkoff(self, audio: bytes):
-        recognized_text_of_tinkoff = VoiceKitRecognizer().recognize(audio)  # Распознаем записанный звук в текст
+    def recognize_by_tinkoff(self, audio_path: Path):
+        recognized_text_of_tinkoff = VoiceKitRecognizer.recognize(audio_path)
         self.tinkoff_text_output.delete(1.0, tk.END)
         self.tinkoff_text_output.insert(tk.END, recognized_text_of_tinkoff)
 
-    def recognize_by_vk(self, audio: bytes):
-        recognized_text_of_vk = VKCloudAudioRecognizer().recognize(audio)
-        recognized_text_of_vk = recognized_text_of_vk['result']['texts'][0]['punctuated_text']
+    def recognize_by_vk(self, audio_path: Path):
+        recognized_text_of_vk = VKCloudAudioRecognizer.recognize(audio_path)
         self.vk_text_output.delete(1.0, tk.END)
         self.vk_text_output.insert(tk.END, recognized_text_of_vk)
 

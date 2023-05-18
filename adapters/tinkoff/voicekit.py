@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import grpc
 
 import config
@@ -11,26 +13,32 @@ class VoiceKitRecognizer(ISpeechRecognizer):
     api_key = config.TINKOFF_API_KEY
     secret_key = config.TINKOFF_SECRET_KEY
 
-    def recognize(self, audio: bytes) -> str:
-        stub = stt_pb2_grpc.SpeechToTextStub(grpc.secure_channel(self.endpoint, grpc.ssl_channel_credentials()))
-        metadata = authorization_metadata(self.api_key, self.secret_key, "tinkoff.cloud.stt")
-        response = stub.Recognize(self.build_request(audio), metadata=metadata)
-        text = self.print_recognition_response(response)
+    @classmethod
+    def recognize(cls, audio_path: Path) -> str:
+        stub = stt_pb2_grpc.SpeechToTextStub(grpc.secure_channel(cls.endpoint, grpc.ssl_channel_credentials()))
+        metadata = authorization_metadata(cls.api_key, cls.secret_key, "tinkoff.cloud.stt")
+        audio_data = cls._get_audio_data(audio_path)
+        response = stub.Recognize(cls.build_request(audio_data), metadata=metadata)
+        text = cls.print_recognition_response(response)
         return text
 
-    def print_recognition_response(self, response):
-        res = ''
+
+
+    @classmethod
+    def print_recognition_response(cls, response) -> str:
+        res = []
         for result in response.results:
             print("Channel", result.channel)
             print("Phrase start:", result.start_time.ToTimedelta())
             print("Phrase end:  ", result.end_time.ToTimedelta())
             for alternative in result.alternatives:
                 print('"' + alternative.transcript + '"')
-                res += alternative.transcript
+                res.append(alternative.transcript)
             print("----------------------------")
-        return res
+        return ' '.join(res)
 
-    def build_request(self, audio: bytes):
+    @classmethod
+    def build_request(cls, audio: bytes):
         request = stt_pb2.RecognizeRequest()
         request.audio.content = audio
         request.config.encoding = stt_pb2.AudioEncoding.LINEAR16

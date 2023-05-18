@@ -1,4 +1,5 @@
-import pyaudio
+from pathlib import Path
+
 import requests
 
 import config
@@ -6,27 +7,28 @@ from audio_recognizer import ISpeechRecognizer
 
 
 class VKCloudAudioRecognizer(ISpeechRecognizer):
-    pyaudio_lib = pyaudio.PyAudio()
-    FORMAT = pyaudio.paInt16  # шестнадцати-битный формат задает значение амплитуды
-    CHANNELS = 1  # канал записи звука
-    SAMPLE_RATE = 16000  # частота
 
-    def recognize(self, audio: bytes) -> dict:
-        result = self._asr(audio)
-        return result
+    @classmethod
+    def recognize(cls, audio_path: Path) -> str:
+        audio_data = cls._get_audio_data(audio_path)
+        result = cls._request(audio_data)
+        text = cls._parse_result(result)
+        return text
 
-    def _asr(
-            self,
-            audio: bytes,
-    ) -> str:
+    @classmethod
+    def _request(cls, audio_data: bytes) -> dict:
         response = requests.post(
             'https://voice.mcs.mail.ru/asr',
             headers={
-                'Content-Type': 'audio/wav',
+                'Content-Type': 'audio/wave',
                 'Authorization': f'Bearer {config.VK_SERVICE_TOKEN}'
             },
-            data=audio
+            data=audio_data
         )
-        print(f'{response.json()=}')
+        print(f'VKCloudAudioRecognizer: {response.json()=}')
         response = response.json()
         return response
+
+    @classmethod
+    def _parse_result(cls, result: dict) -> str:
+        return '.\n'.join([i['punctuated_text'] for i in result['result']['texts']])
