@@ -3,3 +3,4 @@ grpcio
 requests
 soundfile
 numpy
+google-api-python-client
