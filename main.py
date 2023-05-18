@@ -4,9 +4,11 @@ import tkinter as tk
 import wave
 from pathlib import Path
 
+
 import numpy as np
 import pyaudio
 import soundfile as sf
+from PIL import Image, ImageTk
 
 import config
 from adapters.tinkoff.voicekit import VoiceKitRecognizer
@@ -22,8 +24,9 @@ class SpeechRecorderApp:
 
     def __init__(self):
         self.window = tk.Tk()
-        self.window.title("Speech Recorder")
-        self.window.geometry('1135x600')
+        self.window.title("Doctor Script")
+        self.window.geometry('1170x630')
+        self.window.configure(background='#D4F5FE')
 
         self.recording = False
 
@@ -31,23 +34,23 @@ class SpeechRecorderApp:
         self.play_button = tk.Button(self.window, text="Play", command=self.toggle_recording)
         self.play_button.grid(row=0, column=1, pady=5)
 
-        self.label = tk.Label(text='')
-        self.label.grid(row=1, column=1)
+        self.timer = tk.Label(background='#D4F5FE')
+        self.timer.grid(row=1, column=1)
 
-        self.label1 = tk.Label(text='Яндекс')
-        self.label1.grid(row=2, column=0)
-        self.yandex_text_output = tk.Text(self.window, height=30, width=45)
-        self.yandex_text_output.grid(row=3, column=0)
+        yandex_frame = tk.LabelFrame(self.window, text='Яндекс')
+        self.yandex_text_output = tk.Text(yandex_frame, height=30, width=45)
+        self.yandex_text_output.grid()
+        yandex_frame.grid(row=2, column=0, padx=10)
 
-        self.label2 = tk.Label(text='Тинькофф')
-        self.label2.grid(row=2, column=1)
-        self.tinkoff_text_output = tk.Text(self.window, height=30, width=45)
-        self.tinkoff_text_output.grid(row=3, column=1, padx=15)
+        tinkoff_frame = tk.LabelFrame(self.window, text='Тинькофф')
+        self.tinkoff_text_output = tk.Text(tinkoff_frame, height=30, width=45)
+        self.tinkoff_text_output.grid()
+        tinkoff_frame.grid(row=2, column=1, padx=10)
 
-        self.label3 = tk.Label(text='ВК')
-        self.label3.grid(row=2, column=2)
-        self.vk_text_output = tk.Text(self.window, height=30, width=45)
-        self.vk_text_output.grid(row=3, column=2)
+        vk_frame = tk.LabelFrame(self.window, text='ВК')
+        self.vk_text_output = tk.Text(vk_frame, height=30, width=45)
+        self.vk_text_output.grid()
+        vk_frame.grid(row=2, column=2, padx=10)
 
     def toggle_recording(self):
         if not self.recording:
@@ -58,6 +61,10 @@ class SpeechRecorderApp:
             self.recording = False
             self.play_button.config(text="Play")
             self.stop_recording()
+
+    def start_recording(self):
+        self.record()
+        self.recognize()
 
     def record(self):
         audio = pyaudio.PyAudio()
@@ -82,7 +89,7 @@ class SpeechRecorderApp:
             secs = passed % 60
             mins = passed // 60
             hours = mins // 60
-            self.label.config(text=f"{int(hours):02d}:{int(mins):02d}:{int(secs):02d}")
+            self.timer.config(text=f"{int(hours):02d}:{int(mins):02d}:{int(secs):02d}")
 
         stream.stop_stream()
         stream.close()
@@ -91,24 +98,8 @@ class SpeechRecorderApp:
         self.save_wav(audio, wave_frames)
         self.save_ogg(ogg_frames)
 
-    def save_wav(self, audio, frames: list):
-        sound_file = wave.open(str(config.WAVE_PATH), 'wb')
-        sound_file.setnchannels(self.CHANNELS)
-        sound_file.setsampwidth(audio.get_sample_size(self.SAMPLE_FORMAT))
-        sound_file.setframerate(self.SAMPLE_RATE)
-        sound_file.writeframes(b''.join(frames))
-        sound_file.close()
-
-    def save_ogg(self, frames: list):
-        frames = np.concatenate(frames).astype(np.float32)
-        sf.write(str(config.OGG_PATH), frames, self.SAMPLE_RATE, format="ogg")
-
-    def start_recording(self):
-        self.record()
-        self.recognize()
-
     def recognize(self):
-        self.label.config(text='Идет распознавание текста...')
+        self.timer.config(text='Идет распознавание текста...')
 
         threads = [
             threading.Thread(target=self.recognize_by_yandex, args=[config.OGG_PATH]),
@@ -122,7 +113,19 @@ class SpeechRecorderApp:
         for thread in threads:
             thread.join()
 
-        self.label.config(text='')
+        self.timer.config(text='')
+
+    def save_wav(self, audio, frames: list):
+        sound_file = wave.open(str(config.WAVE_PATH), 'wb')
+        sound_file.setnchannels(self.CHANNELS)
+        sound_file.setsampwidth(audio.get_sample_size(self.SAMPLE_FORMAT))
+        sound_file.setframerate(self.SAMPLE_RATE)
+        sound_file.writeframes(b''.join(frames))
+        sound_file.close()
+
+    def save_ogg(self, frames: list):
+        frames = np.concatenate(frames).astype(np.float32)
+        sf.write(str(config.OGG_PATH), frames, self.SAMPLE_RATE, format="ogg")
 
     def recognize_by_yandex(self, audio_path: Path):
         recognized_text_of_yandex = YandexSpeachKitRecognizer.recognize(audio_path)
