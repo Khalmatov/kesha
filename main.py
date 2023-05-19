@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 import pyaudio
 import soundfile as sf
-from PIL import Image, ImageTk
 
 import config
 from adapters.tinkoff.voicekit import VoiceKitRecognizer
